@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GenArt — Generative Art Synthesizer</title>
+  <style>
+    :root {
+      --bg-color: #0d0d11;
+      --panel-bg: rgba(20, 20, 28, 0.7);
+      --accent-color: #6366f1; /* Indigo */
+      --accent-glow: rgba(99, 102, 241, 0.4);
+      --active-color: #10b981; /* Emerald */
+      --active-glow: rgba(16, 185, 129, 0.3);
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+      --card-border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg-color);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #app {
+      position: relative;
+      height: calc(100vh - 22px);
+      width: 100vw;
+      overflow: hidden;
+    }
+
+    #canvas-container {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #181824 0%, #08080c 100%);
+      padding: 16px;
+    }
+
+    #canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6), inset 0 0 100px rgba(0, 0, 0, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.03);
+      transition: border-color 0.5s ease;
+    }
+
+    #anim-name-badge {
+      position: absolute;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 6px 16px;
+      border-radius: 20px;
+      background: rgba(13, 13, 17, 0.6);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      pointer-events: none;
+      z-index: 5;
+      transition: opacity 0.4s ease, background 0.4s ease;
+      opacity: 0;
+    }
+    #anim-name-badge.visible {
+      opacity: 1;
+    }
+
+    #param-list {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 300px;
+      overflow: hidden;
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-left: 1px solid var(--border-color);
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--glass-shadow);
+      z-index: 10;
+      transform: translateX(100%);
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #param-list.open {
+      transform: translateX(0);
+    }
+
+    #param-list::before {
+      content: '';
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      top: calc(50% - 22px);
+      height: 44px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 77, 210, 0.85);
+      background: linear-gradient(90deg, rgba(255, 77, 210, 0.14), rgba(255, 77, 210, 0.03));
+      box-shadow: 0 0 0 1px rgba(255, 77, 210, 0.2), 0 0 24px rgba(255, 77, 210, 0.14);
+      pointer-events: none;
+      z-index: 2;
+      display: none;
+    }
+    #param-list.gallery-mode::before {
+      display: none;
+    }
+
+    #param-mask-top,
+    #param-mask-bottom {
+      position: absolute;
+      left: 0;
+      right: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+    #param-mask-top {
+      top: 0;
+      height: calc(50% - 22px);
+      background: linear-gradient(
+        to bottom,
+        rgba(13, 13, 17, 0.98) 0%,
+        rgba(13, 13, 17, 0.92) 45%,
+        rgba(13, 13, 17, 0) 100%
+      );
+    }
+    #param-list.gallery-mode #param-mask-top {
+      display: none;
+    }
+    #param-mask-bottom {
+      bottom: 0;
+      height: calc(50% - 22px);
+      background: linear-gradient(
+        to top,
+        rgba(13, 13, 17, 0.98) 0%,
+        rgba(13, 13, 17, 0.92) 45%,
+        rgba(13, 13, 17, 0) 100%
+      );
+    }
+    #param-list.gallery-mode #param-mask-bottom {
+      display: none;
+    }
+
+    #param-list-body {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 16px 0;
+      overscroll-behavior: contain;
+      z-index: 1;
+    }
+
+    .scroll-spacer {
+      flex: 0 0 auto;
+      width: 100%;
+      pointer-events: none;
+    }
+
+    #panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px 10px 16px;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 8px;
+    }
+    #param-list.gallery-mode #panel-header {
+      border-bottom: none;
+      margin-bottom: 4px;
+    }
+
+    #panel-title {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      background: linear-gradient(to right, #a5b4fc, #6366f1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin: 0;
+    }
+    #param-list.gallery-mode #panel-title {
+      -webkit-text-fill-color: var(--text-main);
+      background: none;
+      font-size: 13px;
+      letter-spacing: 2px;
+    }
+
+    #panel-subtitle {
+      display: none;
+    }
+
+    #anim-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.3px;
+      padding: 0 16px 4px 16px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #param-list.gallery-mode #anim-label {
+      display: none;
+    }
+
+
+
+    /* ======== GALLERY CARDS ======== */
+    .anim-card {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 14px 16px;
+      margin: 0 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      background: rgba(255, 255, 255, 0.02);
+      cursor: default;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .anim-card:last-child {
+      margin-bottom: 12px;
+    }
+    .anim-card .anim-icon {
+      font-size: 18px;
+      margin-bottom: 2px;
+      opacity: 0.5;
+    }
+    .anim-card .anim-card-name {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: var(--text-main);
+    }
+    .anim-card .anim-card-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+    .anim-card.preselected {
+      background: rgba(99, 102, 241, 0.1);
+      border-color: rgba(99, 102, 241, 0.3);
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.08), inset 0 0 30px rgba(99, 102, 241, 0.03);
+      transform: scale(1.02);
+    }
+    .anim-card.preselected .anim-card-name {
+      color: #c7d2fe;
+    }
+    .anim-card.preselected .anim-icon {
+      opacity: 1;
+    }
+    .anim-card.preselected::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 25%;
+      bottom: 25%;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+      background: var(--accent-color);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+
+    /* ======== BACK PARAM ROW ======== */
+    .param-row.back-row {
+      cursor: pointer;
+      background: rgba(99, 102, 241, 0.06);
+      border-color: rgba(99, 102, 241, 0.12);
+      margin-bottom: 4px;
+    }
+    .param-row.back-row:hover {
+      background: rgba(99, 102, 241, 0.12);
+      border-color: rgba(99, 102, 241, 0.25);
+    }
+
+    /* ======== PARAM ROWS ======== */
+    .param-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      margin: 0 10px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.01);
+      cursor: default;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .param-row:last-child {
+      margin-bottom: 12px;
+    }
+    .param-row.preselected {
+      background: rgba(99, 102, 241, 0.1);
+      border-color: rgba(99, 102, 241, 0.25);
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.1);
+      transform: scale(1.02);
+    }
+    .param-row.active {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.4);
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+      transform: scale(1.03);
+    }
+    .param-details {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .param-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+      text-transform: capitalize;
+      letter-spacing: 0.3px;
+    }
+    .param-row.preselected .param-name {
+      color: #c7d2fe;
+    }
+    .param-row.active .param-name {
+      color: #a7f3d0;
+    }
+    .param-range {
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'DejaVu Sans Mono', monospace;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .param-value-container {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+    .param-value {
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'DejaVu Sans Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      color: #ffffff;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+    }
+    .param-row.active .param-value {
+      color: #34d399;
+      text-shadow: 0 0 12px rgba(52, 211, 153, 0.4);
+    }
+
+    /* ======== MODE BADGE IN SIDEBAR ======== */
+    #mode-badge {
+      font-size: 9px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 10px;
+      background: rgba(99, 102, 241, 0.15);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+    #param-list.gallery-mode #mode-badge {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    #status-bar {
+      height: 22px;
+      width: 100vw;
+      background: #060608;
+      border-top: 1px solid var(--border-color);
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'DejaVu Sans Mono', monospace;
+      font-size: 11px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-muted);
+      z-index: 20;
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #ef4444;
+      box-shadow: 0 0 8px #ef4444;
+      display: inline-block;
+      transition: all 0.3s ease;
+    }
+    .status-dot.connected {
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+
+    #param-list-body::-webkit-scrollbar {
+      width: 6px;
+    }
+    #param-list-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    #param-list-body::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
+    #param-list-body::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    @media (max-width: 768px) and (orientation: portrait) {
+      #canvas-container { padding: 8px; }
+      #canvas { border-radius: 12px; }
+      #param-list {
+        top: auto; bottom: 0; left: 0; right: 0;
+        width: auto; max-height: 75vh;
+        border-left: none; border-top: 1px solid var(--border-color);
+        border-radius: 16px 16px 0 0; padding: 0;
+        transform: translateY(calc(100% - 46px));
+        z-index: 20;
+      }
+      #param-list.open { transform: translateY(0); }
+      #param-list.gallery-mode {
+        transform: translateY(calc(100% - 56px));
+      }
+      #param-list.gallery-mode.open {
+        transform: translateY(0);
+      }
+      #panel-header { padding: 10px 14px 10px 16px; margin-bottom: 0; border-bottom: none; min-height: 46px; }
+      #param-list-body { gap: 4px; padding: 0 0 8px 0; }
+      #panel-title { font-size: 13px; }
+      .param-row { padding: 8px 14px; margin: 0 8px; border-radius: 8px; }
+      .param-name { font-size: 11px; }
+      .param-value { font-size: 12px; }
+      .param-range { font-size: 9px; }
+      .anim-card { padding: 10px 14px; margin: 0 8px; }
+      .anim-card .anim-card-name { font-size: 13px; }
+      .anim-card .anim-card-desc { font-size: 10px; }
+      #anim-name-badge { top: 16px; font-size: 10px; padding: 4px 12px; }
+    }
+
+    #fs-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      background: rgba(13, 13, 17, 0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      cursor: pointer;
+      transition: opacity 0.5s ease;
+    }
+    #fs-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #fs-overlay .fs-title {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      background: linear-gradient(to right, #a5b4fc, #6366f1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    #fs-overlay .fs-hint {
+      font-size: 13px;
+      color: var(--text-muted);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-container">
+      <canvas id="canvas"></canvas>
+      <div id="anim-name-badge"></div>
+    </div>
+    <aside id="param-list">
+      <div id="param-mask-top"></div>
+      <div id="param-mask-bottom"></div>
+      <div id="param-list-body">
+        <div id="panel-header">
+          <h1 id="panel-title">GenArt Synth</h1>
+          <span id="mode-badge">PARAMS</span>
+        </div>
+        <div id="anim-label"></div>
+      </div>
+    </aside>
+  </div>
+  <div id="status-bar">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-text">Disconnected</span>
+  </div>
+
+  <div id="fs-overlay">
+    <div class="fs-title">GenArt Synth</div>
+    <div class="fs-hint">&#9670; Tap to enter fullscreen &#9670;</div>
+  </div>
+
+  <script>
+    /* ======================== WS MODULE ======================== */
+    const WS = (() => {
+      let _socket = null;
+      let _onMessage = null;
+      let _onOpen = null;
+
+      function connect() {
+        const url = `ws://${location.host}/ws?t=${Date.now()}`;
+        console.log('WS connecting to', url);
+        setStatus('Connecting...', false);
+        _socket = new WebSocket(url);
+
+        _socket.onopen = () => {
+          console.log('WS connected');
+          setStatus('Connected', true);
+          if (_onOpen) _onOpen();
+        };
+
+        _socket.onmessage = (evt) => {
+          try {
+            const msg = JSON.parse(evt.data);
+            console.log('WS msg:', msg.type);
+            if (_onMessage) _onMessage(msg);
+          } catch (e) {
+            console.error('WS parse error', e);
+          }
+        };
+
+        _socket.onclose = (evt) => {
+          console.log('WS closed code=' + evt.code + ' reason=' + evt.reason);
+          setStatus('Disconnected (code ' + evt.code + ')', false);
+          setTimeout(connect, 2000);
+        };
+
+        _socket.onerror = (err) => {
+          console.error('WS error', err);
+          _socket.close();
+        };
+      }
+
+      function setStatus(text, isConnected) {
+        const textEl = document.getElementById('status-text');
+        const dotEl = document.getElementById('status-dot');
+        if (textEl) textEl.textContent = text;
+        if (dotEl) {
+          dotEl.className = 'status-dot' + (isConnected ? ' connected' : '');
+        }
+      }
+
+      return {
+        init(onMessage, onOpen) {
+          _onMessage = onMessage;
+          _onOpen    = onOpen;
+          connect();
+        },
+        send(data) {
+          if (_socket && _socket.readyState === WebSocket.OPEN) {
+            _socket.send(data);
+          }
+        }
+      };
+    })();
+  </script>
+
+  <script>
+    /* ======================== PARAMS MODULE ======================== */
+    const PARAMS = (() => {
+      let _params   = [];
+      let _mode     = 'ANIM_SELECT';
+      let _presel   = 0;
+      let _active   = -1;
+      let _animIdx  = 0;
+      let _animCnt  = 5;
+      let _animNames= [];
+      let _onChange = null;
+
+      function applySnapshot(msg) {
+        _params  = msg.params.map(p => ({ ...p }));
+        _mode    = msg.mode;
+        _presel  = msg.preselected;
+        _active  = msg.active;
+        _animIdx = msg.anim_index;
+        _animCnt = msg.anim_count || 5;
+        _animNames = msg.anim_names || [];
+        if (_onChange) _onChange('snapshot');
+      }
+
+      function applyStateChanged(msg) {
+        _mode   = msg.mode;
+        _presel = msg.preselected;
+        _active = msg.active;
+        if (_onChange) _onChange('state');
+      }
+
+      function applyParamChanged(msg) {
+        if (msg.index >= 0 && msg.index < _params.length) {
+          _params[msg.index].value = msg.value;
+        }
+        if (_onChange) _onChange('param');
+      }
+
+      function applyAnimChanged(msg) {
+        _animIdx = msg.anim_index;
+        if (_onChange) _onChange('animation');
+      }
+
+      return {
+        init(onChange) { _onChange = onChange; },
+
+        handle(msg) {
+          if      (msg.type === 'snapshot')          applySnapshot(msg);
+          else if (msg.type === 'state_changed')     applyStateChanged(msg);
+          else if (msg.type === 'param_changed')     applyParamChanged(msg);
+          else if (msg.type === 'animation_changed') applyAnimChanged(msg);
+        },
+
+        getAll()       { return _params; },
+        getMode()      { return _mode; },
+        getPresel()    { return _presel; },
+        getActive()    { return _active; },
+        getAnimIdx()   { return _animIdx; },
+        getAnimCnt()   { return _animCnt; },
+        getAnimNames() { return _animNames; },
+      };
+    })();
+  </script>
+
+  <script>
+    /* ======================== UI MODULE ======================== */
+    const UI = (() => {
+      const list = document.getElementById('param-list');
+      const body = document.getElementById('param-list-body');
+      const header = document.getElementById('panel-header');
+      const title  = document.getElementById('panel-title');
+      const badge  = document.getElementById('mode-badge');
+      const animLabel = document.getElementById('anim-label');
+      const topSpacer = document.createElement('div');
+      const bottomSpacer = document.createElement('div');
+      let _inactivityTimer = null;
+
+      topSpacer.className = 'scroll-spacer';
+      bottomSpacer.className = 'scroll-spacer';
+
+      const ANIM_DESCS = [
+        'Parametric Lissajous curves with motion trails',
+        'Flowing particles with gravity, wind & turbulence',
+        'Rotating geometric mandala spirals',
+        'Undulating 3D wave grid',
+        "Conway's Game of Life cellular automaton",
+      ];
+
+      function updateScrollSpacers() {
+        const spacerSize = Math.max(0, Math.round(body.clientHeight / 2));
+        topSpacer.style.height = `${spacerSize}px`;
+        bottomSpacer.style.height = `${spacerSize}px`;
+      }
+
+      function getAnchorIndex(params, presel, active) {
+        if (active >= 0 && active < params.length) return active;
+        if (presel >= 0 && presel < params.length) return presel;
+        return -1;
+      }
+
+      function clampScrollTop(scrollTop) {
+        const maxTop = Math.max(0, body.scrollHeight - body.clientHeight);
+        return Math.max(0, Math.min(maxTop, scrollTop));
+      }
+
+      function syncScrollToAnchor() {
+        const params = PARAMS.getAll();
+        const anchorIndex = getAnchorIndex(params, PARAMS.getPresel(), PARAMS.getActive());
+        if (anchorIndex < 0) return;
+        const rows = body.querySelectorAll('.param-row');
+        const anchorRow = rows[anchorIndex];
+        if (!anchorRow) return;
+        const targetTop = anchorRow.offsetTop - (body.clientHeight / 2) + (anchorRow.offsetHeight / 2);
+        body.scrollTop = clampScrollTop(targetTop);
+      }
+
+      function syncScrollToCard() {
+        const cards = body.querySelectorAll('.anim-card');
+        const presel = PARAMS.getPresel();
+        const card = cards[presel];
+        if (!card) return;
+        const targetTop = card.offsetTop - (body.clientHeight / 2) + (card.offsetHeight / 2);
+        body.scrollTop = clampScrollTop(targetTop);
+      }
+
+      function activity() {
+        list.classList.add('open');
+        clearTimeout(_inactivityTimer);
+        _inactivityTimer = setTimeout(() => {
+          list.classList.remove('open');
+        }, 5000);
+      }
+
+      function renderGallery() {
+        list.classList.add('gallery-mode');
+        title.textContent = 'SELECT ANIMATION';
+        badge.textContent = 'GALLERY';
+
+        body.innerHTML = '';
+        body.appendChild(header);
+        body.appendChild(animLabel);
+        animLabel.textContent = '';
+        body.appendChild(topSpacer);
+
+        const animNames = PARAMS.getAnimNames();
+        const presel = PARAMS.getPresel();
+
+        animNames.forEach((name, i) => {
+          const card = document.createElement('div');
+          card.className = 'anim-card' + (i === presel ? ' preselected' : '');
+          card.innerHTML =
+            `<div class="anim-card-name">${name}</div>` +
+            `<div class="anim-card-desc">${ANIM_DESCS[i] || ''}</div>`;
+          body.appendChild(card);
+        });
+
+        body.appendChild(bottomSpacer);
+        updateScrollSpacers();
+        requestAnimationFrame(syncScrollToCard);
+      }
+
+      function sendBack() {
+        WS.send(JSON.stringify({ action: 'back' }));
+      }
+
+      function renderBackRow() {
+        const backRow = document.createElement('div');
+        backRow.className = 'param-row back-row';
+        backRow.innerHTML =
+          `<div class="param-details">` +
+            `<div class="param-name" style="color:#a5b4fc">← Back to animations</div>` +
+          `</div>`;
+        backRow.addEventListener('click', sendBack);
+        return backRow;
+      }
+
+      function renderParams() {
+        list.classList.remove('gallery-mode');
+        title.textContent = 'GenArt Synth';
+        badge.textContent = 'PARAMS';
+        const animNames = PARAMS.getAnimNames();
+        const animIdx = PARAMS.getAnimIdx();
+
+        const params  = PARAMS.getAll();
+        const presel  = PARAMS.getPresel();
+        const active  = PARAMS.getActive();
+
+        body.innerHTML = '';
+        body.appendChild(header);
+        body.appendChild(animLabel);
+        animLabel.textContent = (animNames[animIdx] || 'Animation ' + animIdx);
+        body.appendChild(topSpacer);
+
+        params.forEach((p, i) => {
+          const row = document.createElement('div');
+          row.className = 'param-row' +
+            (i === 0 ? ' back-row' : '') +
+            (i === presel && active === -1 ? ' preselected' : '') +
+            (i === active               ? ' active'      : '');
+
+          if (i === 0) {
+            row.innerHTML =
+              `<div class="param-details">` +
+                `<div class="param-name" style="color:#a5b4fc">← ${p.name}</div>` +
+              `</div>`;
+          } else {
+            const decimals = (p.decimals !== undefined) ? p.decimals : 2;
+            const valStr   = p.value.toFixed(decimals);
+            row.innerHTML =
+              `<div class="param-details">` +
+                `<div class="param-name">${p.name}</div>` +
+                `<div class="param-range">${p.min.toFixed(decimals)} – ${p.max.toFixed(decimals)}</div>` +
+              `</div>` +
+              `<div class="param-value-container">` +
+                `<div class="param-value">${valStr}</div>` +
+              `</div>`;
+          }
+
+          body.appendChild(row);
+        });
+
+        body.appendChild(bottomSpacer);
+        updateScrollSpacers();
+        requestAnimationFrame(syncScrollToAnchor);
+      }
+
+      function render() {
+        const mode = PARAMS.getMode();
+        if (mode === 'ANIM_SELECT') {
+          renderGallery();
+        } else {
+          renderParams();
+        }
+      }
+
+      return { render, activity };
+    })();
+  </script>
+
+  <script>
+    /* ======================== ART SKETCHES ======================== */
+
+    /* ---------- helper ---------- */
+    function pv(params, index, fallback) {
+      return (params[index] !== undefined) ? params[index].value : fallback;
+    }
+
+    /* ====== 0: LISSAJOUS ====== */
+    const ART_Lissajous = (() => {
+      let ctx = null;
+      return {
+        init(c) { ctx = c.getContext('2d'); },
+        draw(params, timestamp, w, h) {
+          const freqA    = pv(params, 1, 1.00);
+          const freqB    = pv(params, 2, 2.00);
+          const fade     = pv(params, 3, 0.05);
+          const bright   = pv(params, 4, 0.80);
+          const r        = pv(params, 5, 0.50);
+          const g        = pv(params, 6, 0.50);
+          const b        = pv(params, 7, 0.50);
+          const vel      = pv(params, 8, 0.25);
+          const lineW    = pv(params, 9, 2.00);
+          const shadow   = pv(params, 10, 12.0);
+          const phase    = pv(params, 11, 0.00);
+          const scale    = pv(params, 12, 1.00);
+          const xOff     = pv(params, 13, 0.00);
+          const yOff     = pv(params, 14, 0.00);
+          const rot      = pv(params, 15, 0.00);
+          const density  = Math.round(pv(params, 16, 4.00));
+
+          ctx.fillStyle = `rgba(13,13,17,${Math.max(0.005, fade)})`;
+          ctx.fillRect(0, 0, w, h);
+
+          const speed   = vel * 0.002;
+          const delta   = timestamp * speed;
+          const cx      = w / 2 + xOff * w * 0.4;
+          const cy      = h / 2 + yOff * h * 0.4;
+          const rx      = w * 0.42 * scale;
+          const ry      = h * 0.42 * scale;
+          const steps   = Math.max(10, 100 * density);
+          const dTheta  = (2 * Math.PI) / steps;
+          const angle   = rot * Math.PI / 180;
+          const cosA    = Math.cos(angle);
+          const sinA    = Math.sin(angle);
+
+          ctx.strokeStyle = `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},${bright})`;
+          ctx.shadowColor = `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},0.4)`;
+          ctx.shadowBlur = shadow;
+          ctx.lineWidth   = Math.max(0.1, lineW);
+          ctx.beginPath();
+
+          for (let i = 0; i <= steps; i++) {
+            const t = i * dTheta;
+            const px = rx * Math.sin(freqA * t + delta);
+            const py = ry * Math.sin(freqB * t + phase);
+            const x = cx + px * cosA - py * sinA;
+            const y = cy + px * sinA + py * cosA;
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+      };
+    })();
+
+    /* ====== 1: PARTICLE FLOW ====== */
+    const ART_ParticleFlow = (() => {
+      let ctx = null;
+      let particles = [];
+      let w = 0, h = 0;
+
+      return {
+        init(c) {
+          ctx = c.getContext('2d');
+          particles = [];
+          w = c.width; h = c.height;
+        },
+        draw(params, timestamp, cw, ch) {
+          w = cw; h = ch;
+          if (!ctx) return;
+
+          const speed     = pv(params, 1, 0.50);
+          const size      = pv(params, 2, 2.00);
+          const fade      = pv(params, 3, 0.02);
+          const bright    = pv(params, 4, 0.80);
+          const r         = pv(params, 5, 0.70);
+          const g         = pv(params, 6, 0.30);
+          const b         = pv(params, 7, 0.50);
+          const spawnRate = Math.round(pv(params, 8, 5));
+          const lifeSpan  = Math.round(pv(params, 9, 60));
+          const gravity   = pv(params, 10, 0.00);
+          const wind      = pv(params, 11, 0.00);
+          const turb      = pv(params, 12, 0.50);
+          const scale     = pv(params, 13, 1.00);
+          const spread    = pv(params, 14, 0.50);
+          const rot       = pv(params, 15, 0.00);
+          const maxP      = Math.round(pv(params, 16, 200));
+
+          // Fade trail
+          ctx.fillStyle = `rgba(13,13,17,${Math.max(0.005, fade)})`;
+          ctx.fillRect(0, 0, w, h);
+
+          const angle = rot * Math.PI / 180;
+          const cosR = Math.cos(angle), sinR = Math.sin(angle);
+          const cx = w / 2, cy = h / 2;
+          const spd = speed * 0.5;
+
+          // Spawn
+          for (let i = 0; i < spawnRate && particles.length < maxP; i++) {
+            const a2 = Math.random() * 2 * Math.PI;
+            const rad = Math.random() * spread * Math.min(w, h) * 0.3;
+            particles.push({
+              x: cx + Math.cos(a2) * rad,
+              y: cy + Math.sin(a2) * rad,
+              vx: (Math.random() - 0.5) * spd,
+              vy: (Math.random() - 0.5) * spd,
+              life: 0, maxLife: lifeSpan + Math.random() * 20,
+              sz: size * (0.5 + Math.random() * 0.5),
+            });
+          }
+
+          // Update & draw
+          const tFactor = timestamp * 0.001;
+          ctx.shadowBlur = size * 2;
+          ctx.shadowColor = `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},0.3)`;
+
+          for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.life++;
+            if (p.life > p.maxLife) { particles.splice(i, 1); continue; }
+
+            p.vy += gravity * 0.01;
+            p.vx += wind * 0.005;
+            p.vx += Math.sin(p.life * 0.05 + tFactor) * turb * 0.01;
+            p.vy += Math.cos(p.life * 0.07 + tFactor) * turb * 0.01;
+            p.x += p.vx;
+            p.y += p.vy;
+
+            // Rotate around center
+            const dx = p.x - cx, dy = p.y - cy;
+            const rx = dx * cosR - dy * sinR;
+            const ry = dx * sinR + dy * cosR;
+            const sx = cx + rx, sy = cy + ry;
+
+            const alpha = bright * (1 - p.life / p.maxLife) * scale;
+            ctx.fillStyle = `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},${alpha})`;
+            ctx.beginPath();
+            ctx.arc(sx, sy, p.sz * scale * 0.1, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.shadowBlur = 0;
+        }
+      };
+    })();
+
+    /* ====== 2: HYPNOTIC SPIRAL ====== */
+    const ART_HypnoticSpiral = (() => {
+      let ctx = null;
+      let angleOffset = 0;
+
+      return {
+        init(c) {
+          ctx = c.getContext('2d');
+          angleOffset = 0;
+        },
+        draw(params, timestamp, w, h) {
+          if (!ctx) return;
+
+          const speed     = pv(params, 1, 0.30);
+          const arms      = Math.round(pv(params, 2, 4));
+          const fade      = pv(params, 3, 0.03);
+          const bright    = pv(params, 4, 0.90);
+          const r         = pv(params, 5, 0.90);
+          const g         = pv(params, 6, 0.20);
+          const b         = pv(params, 7, 0.60);
+          const twist     = pv(params, 8, 3.00);
+          const thick     = pv(params, 9, 2.00);
+          const pulse     = pv(params, 10, 0.50);
+          const colorCycle= pv(params, 11, 0.00);
+          const scale     = pv(params, 12, 1.00);
+          const xOff      = pv(params, 13, 0.00);
+          const yOff      = pv(params, 14, 0.00);
+          const rotOff    = pv(params, 15, 0.00);
+          const comp      = Math.round(pv(params, 16, 5));
+
+          ctx.fillStyle = `rgba(13,13,17,${Math.max(0.005, fade)})`;
+          ctx.fillRect(0, 0, w, h);
+
+          const cx = w / 2 + xOff * w * 0.3;
+          const cy = h / 2 + yOff * h * 0.3;
+          const maxR = Math.min(w, h) * 0.42 * scale;
+          const spd = speed * 0.003;
+          angleOffset += spd * timestamp * 0.1;
+          const baseAngle = rotOff * Math.PI / 180 + angleOffset;
+
+          const segments = 80 + comp * 20;
+          const dStep = 1 / segments;
+
+          for (let a = 0; a < arms; a++) {
+            const armAngle = (a / arms) * 2 * Math.PI;
+            const pulseVal = 1 + 0.3 * Math.sin(timestamp * pulse * 0.002 + a);
+
+            ctx.lineWidth = thick * 0.5;
+            ctx.beginPath();
+
+            for (let i = 0; i <= segments; i++) {
+              const t = i * dStep;
+              const rad = t * maxR * pulseVal;
+              const theta = baseAngle + armAngle + t * twist * 2 * Math.PI;
+              const x = cx + Math.cos(theta) * rad;
+              const y = cy + Math.sin(theta) * rad;
+              i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            }
+
+            const hueShift = (colorCycle * timestamp * 0.05 + a / arms) % 1;
+            const rr = r * (0.5 + 0.5 * Math.sin(hueShift * 6.28));
+            const gg = g * (0.5 + 0.5 * Math.sin(hueShift * 6.28 + 2.09));
+            const bb = b * (0.5 + 0.5 * Math.sin(hueShift * 6.28 + 4.19));
+            ctx.strokeStyle = `rgba(${Math.round(rr*255)},${Math.round(gg*255)},${Math.round(bb*255)},${bright})`;
+            ctx.shadowColor = `rgba(${Math.round(rr*255)},${Math.round(gg*255)},${Math.round(bb*255)},0.3)`;
+            ctx.shadowBlur = thick * 2;
+            ctx.stroke();
+          }
+          ctx.shadowBlur = 0;
+        }
+      };
+    })();
+
+    /* ====== 3: WAVE GRID ====== */
+    const ART_WaveGrid = (() => {
+      let ctx = null;
+
+      return {
+        init(c) { ctx = c.getContext('2d'); },
+        draw(params, timestamp, w, h) {
+          if (!ctx) return;
+
+          const speed     = pv(params, 1, 0.50);
+          const waveH     = pv(params, 2, 0.40);
+          const fade      = pv(params, 3, 0.02);
+          const bright    = pv(params, 4, 0.90);
+          const r         = pv(params, 5, 0.30);
+          const g         = pv(params, 6, 0.70);
+          const b         = pv(params, 7, 1.00);
+          const gridSize  = Math.round(pv(params, 8, 20));
+          const freq      = pv(params, 9, 1.50);
+          const persp     = pv(params, 10, 0.30);
+          const hueShift  = pv(params, 11, 0.00);
+          const scale     = pv(params, 12, 1.00);
+          const xOff      = pv(params, 13, 0.00);
+          const yOff      = pv(params, 14, 0.00);
+          const rot       = pv(params, 15, 0.00);
+          const lineW     = pv(params, 16, 1.00);
+
+          ctx.fillStyle = `rgba(13,13,17,${Math.max(0.005, fade)})`;
+          ctx.fillRect(0, 0, w, h);
+
+          const cx = w / 2 + xOff * w * 0.3;
+          const cy = h / 2 + yOff * h * 0.3;
+          const t = timestamp * speed * 0.002;
+          const angle = rot * Math.PI / 180;
+          const cosR = Math.cos(angle), sinR = Math.sin(angle);
+          const size = Math.min(w, h) * 0.35 * scale;
+          const spacing = (2 * size) / (gridSize + 1);
+          const half = (gridSize - 1) / 2;
+
+          ctx.lineWidth = lineW;
+
+          for (let i = 0; i < gridSize; i++) {
+            ctx.beginPath();
+            for (let j = 0; j < gridSize; j++) {
+              const lx = (i - half) * spacing;
+              const ly = (j - half) * spacing;
+              const dist = Math.sqrt(lx * lx + ly * ly);
+              const z = Math.sin(dist * freq * 0.05 - t) * waveH * size * 0.3;
+              const px = lx;
+              const py = ly - z * persp;
+              const pz = z * (1 - persp);
+              const sx = cx + (px * cosR - py * sinR) * (1 + pz / size);
+              const sy = cy + (px * sinR + py * cosR) * (1 + pz / size);
+              j === 0 ? ctx.moveTo(sx, sy) : ctx.lineTo(sx, sy);
+            }
+            ctx.stroke();
+          }
+
+          for (let j = 0; j < gridSize; j++) {
+            ctx.beginPath();
+            for (let i = 0; i < gridSize; i++) {
+              const lx = (i - half) * spacing;
+              const ly = (j - half) * spacing;
+              const dist = Math.sqrt(lx * lx + ly * ly);
+              const z = Math.sin(dist * freq * 0.05 - t) * waveH * size * 0.3;
+              const px = lx;
+              const py = ly - z * persp;
+              const pz = z * (1 - persp);
+              const sx = cx + (px * cosR - py * sinR) * (1 + pz / size);
+              const sy = cy + (px * sinR + py * cosR) * (1 + pz / size);
+              i === 0 ? ctx.moveTo(sx, sy) : ctx.lineTo(sx, sy);
+            }
+            ctx.stroke();
+          }
+
+          const hs = (hueShift * t) % 1;
+          const rr = r * (0.6 + 0.4 * Math.sin(hs * 6.28));
+          const gg = g * (0.6 + 0.4 * Math.sin(hs * 6.28 + 2.09));
+          const bb = b * (0.6 + 0.4 * Math.sin(hs * 6.28 + 4.19));
+          ctx.strokeStyle = `rgba(${Math.round(rr*255)},${Math.round(gg*255)},${Math.round(bb*255)},${bright})`;
+        }
+      };
+    })();
+
+    /* ====== 4: GAME OF LIFE ====== */
+    const ART_GameOfLife = (() => {
+      let ctx = null;
+      let grid = null;
+      let gridW = 0, gridH = 0;
+      let frameCount = 0;
+      let prevDensity = -1;
+
+      function countNeighbors(x, y, wrap) {
+        let n = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            let nx, ny;
+            if (wrap) {
+              nx = (x + dx + gridW) % gridW;
+              ny = (y + dy + gridH) % gridH;
+            } else {
+              nx = x + dx; ny = y + dy;
+              if (nx < 0 || nx >= gridW || ny < 0 || ny >= gridH) continue;
+            }
+            n += grid[ny * gridW + nx];
+          }
+        }
+        return n;
+      }
+
+      function randomize(density) {
+        for (let i = 0; i < grid.length; i++) {
+          grid[i] = Math.random() < density ? 1 : 0;
+        }
+      }
+
+      function resize(w, h, cellSize) {
+        const nw = Math.max(8, Math.ceil(w / Math.max(1, cellSize)));
+        const nh = Math.max(8, Math.ceil(h / Math.max(1, cellSize)));
+        if (nw !== gridW || nh !== gridH) {
+          gridW = nw; gridH = nh;
+          grid = new Uint8Array(gridW * gridH);
+          randomize(0.3);
+        }
+      }
+
+      function step(bMin, bMax, sMin, sMax, wrap) {
+        const next = new Uint8Array(gridW * gridH);
+        for (let y = 0; y < gridH; y++) {
+          for (let x = 0; x < gridW; x++) {
+            const idx = y * gridW + x;
+            const n = countNeighbors(x, y, wrap);
+            if (grid[idx]) {
+              next[idx] = (n >= sMin && n <= sMax) ? 1 : 0;
+            } else {
+              next[idx] = (n >= bMin && n <= bMax) ? 1 : 0;
+            }
+          }
+        }
+        grid = next;
+      }
+
+      return {
+        init(c) {
+          ctx = c.getContext('2d');
+          grid = null; gridW = 0; gridH = 0;
+          frameCount = 0;
+        },
+        draw(params, timestamp, w, h) {
+          if (!ctx) return;
+
+          const speed     = pv(params, 1, 0.50);
+          const density   = pv(params, 2, 0.30);
+          const fade      = pv(params, 3, 0.05);
+          const bright    = pv(params, 4, 0.90);
+          const r         = pv(params, 5, 0.10);
+          const g         = pv(params, 6, 0.80);
+          const b         = pv(params, 7, 0.30);
+          const gridSize  = Math.round(pv(params, 8, 40));
+          const wrap      = Math.round(pv(params, 9, 1)) === 1;
+          const bMin      = Math.round(pv(params, 10, 3));
+          const bMax      = Math.round(pv(params, 11, 3));
+          const sMin      = Math.round(pv(params, 12, 2));
+          const sMax      = Math.round(pv(params, 13, 3));
+          const cellSize  = Math.round(pv(params, 14, 3));
+          const glow      = pv(params, 15, 8);
+          const reseed    = pv(params, 16, 0);
+
+          // Resize grid if needed
+          resize(w, h, cellSize);
+
+          // Re-seed if density changed or reseed triggered
+          if (Math.abs(density - prevDensity) > 0.01) {
+            prevDensity = density;
+            randomize(density);
+          }
+
+          // Fade trail
+          ctx.fillStyle = `rgba(13,13,17,${Math.max(0.005, fade)})`;
+          ctx.fillRect(0, 0, w, h);
+
+          // Compute next generation every N frames based on speed
+          const interval = Math.max(1, Math.round(20 - speed * 19));
+          frameCount++;
+          if (frameCount % interval === 0) {
+            step(bMin, bMax, sMin, sMax, wrap);
+          }
+
+          // Draw cells
+          const cw = Math.ceil(w / gridW);
+          const ch = Math.ceil(h / gridH);
+          ctx.shadowColor = `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},0.5)`;
+          ctx.shadowBlur = glow;
+
+          for (let y = 0; y < gridH; y++) {
+            for (let x = 0; x < gridW; x++) {
+              if (grid[y * gridW + x]) {
+                ctx.fillStyle = `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},${bright})`;
+                ctx.fillRect(x * cw, y * ch, Math.max(1, cw - 1), Math.max(1, ch - 1));
+              }
+            }
+          }
+          ctx.shadowBlur = 0;
+        }
+      };
+    })();
+  </script>
+
+  <script>
+    /* ======================== ART DISPATCHER ======================== */
+    const ART = (() => {
+      const sketches = [
+        ART_Lissajous,
+        ART_ParticleFlow,
+        ART_HypnoticSpiral,
+        ART_WaveGrid,
+        ART_GameOfLife,
+      ];
+      let _currentIdx = -1;
+      let _canvas = null;
+
+      function init(canvas) {
+        _canvas = canvas;
+        if (sketches.length > 0) {
+          _currentIdx = 0;
+          sketches[0].init(canvas);
+        }
+      }
+
+      function switchTo(idx, canvas) {
+        if (idx === _currentIdx) return;
+        if (idx < 0 || idx >= sketches.length) return;
+
+        // Clear canvas fully before switching
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#0d0d11';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        _currentIdx = idx;
+        sketches[idx].init(canvas);
+
+        // Show animation name badge briefly
+        const badge = document.getElementById('anim-name-badge');
+        const names = ['Lissajous','Particle Flow','Hypnotic Spiral','Wave Grid','Game of Life'];
+        if (badge) {
+          badge.textContent = names[idx] || '';
+          badge.classList.add('visible');
+          setTimeout(() => badge.classList.remove('visible'), 1500);
+        }
+      }
+
+      function draw(params, timestamp) {
+        if (_currentIdx < 0 || !_canvas) return;
+        const w = _canvas.width;
+        const h = _canvas.height;
+        sketches[_currentIdx].draw(params, timestamp, w, h);
+      }
+
+      return { init, switchTo, draw };
+    })();
+  </script>
+
+  <script>
+    /* ======================== MAIN LOOP ======================== */
+    function resizeCanvas() {
+      const canvas = document.getElementById('canvas');
+      if (canvas) {
+        canvas.width  = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+      }
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    /* Wire up modules */
+    PARAMS.init(() => UI.render());
+
+    WS.init(
+      (msg) => {
+        if (msg.type === 'animation_changed') {
+          const canvas = document.getElementById('canvas');
+          ART.switchTo(msg.anim_index, canvas);
+        }
+        PARAMS.handle(msg);
+        UI.activity();
+      },
+      ()    => {}
+    );
+
+    /* Animation loop */
+    const canvas = document.getElementById('canvas');
+    ART.init(canvas);
+
+    function loop(timestamp) {
+      ART.draw(PARAMS.getAll(), timestamp);
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    /* Fullscreen overlay — dismiss on any interaction */
+    const fsOverlay = document.getElementById('fs-overlay');
+    if (fsOverlay) {
+      function dismissFs() {
+        fsOverlay.classList.add('hidden');
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      }
+      fsOverlay.addEventListener('click', dismissFs);
+      fsOverlay.addEventListener('touchstart', dismissFs);
+    }
+  </script>
+</body>
+</html>
