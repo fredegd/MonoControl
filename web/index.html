@@ -237,48 +237,46 @@
     /* ======== GALLERY CARDS ======== */
     .anim-card {
       display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding: 14px 16px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
       margin: 0 10px;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.04);
-      background: rgba(255, 255, 255, 0.02);
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.01);
       cursor: default;
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
-      overflow: hidden;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .anim-card:last-child {
       margin-bottom: 12px;
     }
-    .anim-card .anim-icon {
-      font-size: 18px;
-      margin-bottom: 2px;
-      opacity: 0.5;
-    }
     .anim-card .anim-card-name {
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
+      font-size: 12px;
+      font-weight: 600;
       color: var(--text-main);
+      letter-spacing: 0.3px;
+      text-transform: capitalize;
     }
     .anim-card .anim-card-desc {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--text-muted);
-      line-height: 1.4;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 140px;
+      text-align: right;
     }
     .anim-card.preselected {
       background: rgba(99, 102, 241, 0.1);
-      border-color: rgba(99, 102, 241, 0.3);
-      box-shadow: 0 0 20px rgba(99, 102, 241, 0.08), inset 0 0 30px rgba(99, 102, 241, 0.03);
+      border-color: rgba(99, 102, 241, 0.25);
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.1);
       transform: scale(1.02);
     }
     .anim-card.preselected .anim-card-name {
       color: #c7d2fe;
     }
-    .anim-card.preselected .anim-icon {
-      opacity: 1;
+    .anim-card.preselected .anim-card-desc {
+      color: #a5b4fc;
     }
     .anim-card.preselected::after {
       content: '';
@@ -456,9 +454,9 @@
       .param-name { font-size: 11px; }
       .param-value { font-size: 12px; }
       .param-range { font-size: 9px; }
-      .anim-card { padding: 10px 14px; margin: 0 8px; }
-      .anim-card .anim-card-name { font-size: 13px; }
-      .anim-card .anim-card-desc { font-size: 10px; }
+      .anim-card { padding: 8px 12px; margin: 0 8px; }
+      .anim-card .anim-card-name { font-size: 12px; }
+      .anim-card .anim-card-desc { font-size: 9px; max-width: 100px; }
       #anim-name-badge { top: 16px; font-size: 10px; padding: 4px 12px; }
     }
 
@@ -794,7 +792,7 @@
           if (i === 0) {
             row.innerHTML =
               `<div class="param-details">` +
-                `<div class="param-name" style="color:#a5b4fc">← ${p.name}</div>` +
+                `<div class="param-name" style="color:#a5b4fc">${p.name}</div>` +
               `</div>`;
           } else {
             const decimals = (p.decimals !== undefined) ? p.decimals : 2;
