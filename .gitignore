@@ -1,5 +1,6 @@
 build/
 sdkconfig
+managed_components/
 screenlog.*
 *.swp
 *.swo

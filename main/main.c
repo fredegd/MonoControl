@@ -10,6 +10,7 @@
 #include "dns_server.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "mdns.h"
 
 void app_main(void) {
     /* 1. Initialise NVS */
@@ -29,6 +30,11 @@ void app_main(void) {
 
     /* 4. Start captive portal DNS server (answers all DNS with 192.168.4.1) */
     ESP_ERROR_CHECK(dns_server_start());
+
+    /* 5. Set up mDNS so the device is discoverable as genart.local */
+    ESP_ERROR_CHECK(mdns_init());
+    ESP_ERROR_CHECK(mdns_hostname_set("genart"));
+    ESP_ERROR_CHECK(mdns_instance_name_set("ESP32 Generative Art Synthesizer"));
 
     /* 6. Create inter-task queues */
     QueueHandle_t encoder_queue    = xQueueCreate(16, sizeof(encoder_event_t));

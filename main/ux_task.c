@@ -32,6 +32,7 @@ static QueueHandle_t s_ux_queue = NULL;
 static QueueHandle_t s_ws_notify_queue = NULL;
 
 static volatile bool s_timer_running = false;
+static volatile int64_t s_last_rotate_time = 0;
 static esp_timer_handle_t s_click_timer = NULL;
 
 static void post_state_changed(void) {
@@ -77,15 +78,10 @@ static void encoder_reader_task(void *pvParameters) {
     QueueHandle_t encoder_queue = (QueueHandle_t)pvParameters;
     encoder_event_t enc_evt;
 
-    int last_poll_sw = encoder_read_sw();
-    int sw_stable_count = 0;
-    int64_t last_rotate_time = 0;
-    bool button_pressed_flag = false;
-
     while (1) {
-        if (xQueueReceive(encoder_queue, &enc_evt, pdMS_TO_TICKS(50)) == pdTRUE) {
+        if (xQueueReceive(encoder_queue, &enc_evt, portMAX_DELAY) == pdTRUE) {
             if (enc_evt.type == ENCODER_EVT_ROTATE) {
-                last_rotate_time = esp_timer_get_time();
+                s_last_rotate_time = esp_timer_get_time();
                 if (s_timer_running) {
                     esp_timer_stop(s_click_timer);
                     s_timer_running = false;
@@ -97,24 +93,19 @@ static void encoder_reader_task(void *pvParameters) {
                     .delta = enc_evt.delta
                 };
                 xQueueSend(s_ux_queue, &ux_evt, pdMS_TO_TICKS(10));
-            } else if (enc_evt.type == ENCODER_EVT_BUTTON_DOWN) {
-                ESP_LOGI(TAG, "Button DOWN (timer_running=%d)", s_timer_running);
-                if (s_timer_running) {
-                    ESP_LOGI(TAG, "Double click detected");
-                    esp_timer_stop(s_click_timer);
-                    s_timer_running = false;
-                    ux_event_t ux_evt = {
-                        .type = UX_EVT_DOUBLE_CLICK,
-                        .delta = 0
-                    };
-                    xQueueSend(s_ux_queue, &ux_evt, pdMS_TO_TICKS(10));
-                } else {
-                    s_timer_running = true;
-                    esp_timer_start_once(s_click_timer, 250000);
-                }
-            } else if (enc_evt.type == ENCODER_EVT_BUTTON_UP) {
             }
+            // ENCODER_EVT_BUTTON_DOWN/UP are handled by button_reader_task
         }
+    }
+}
+
+static void button_reader_task(void *pvParameters) {
+    int last_sw = encoder_read_sw();
+    int sw_stable_count = 0;
+    bool button_pressed_flag = false;
+
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(10));
 
         int cur_sw = encoder_read_sw();
 
@@ -122,13 +113,13 @@ static void encoder_reader_task(void *pvParameters) {
             button_pressed_flag = false;
         }
 
-        bool rotation_active = (esp_timer_get_time() - last_rotate_time) < 50000;
+        bool rotation_active = (esp_timer_get_time() - s_last_rotate_time) < 50000;
 
         if (rotation_active) {
             sw_stable_count = 0;
         }
 
-        if (cur_sw == last_poll_sw && !rotation_active && !button_pressed_flag) {
+        if (cur_sw == last_sw && !rotation_active && !button_pressed_flag) {
             if (cur_sw == 0 && ++sw_stable_count >= 2) {
                 sw_stable_count = 0;
                 button_pressed_flag = true;
@@ -148,7 +139,7 @@ static void encoder_reader_task(void *pvParameters) {
                 }
             }
         } else {
-            last_poll_sw = cur_sw;
+            last_sw = cur_sw;
             sw_stable_count = 0;
         }
     }
@@ -331,8 +322,21 @@ esp_err_t ux_task_start(QueueHandle_t encoder_queue,
     BaseType_t ret = xTaskCreatePinnedToCore(
         encoder_reader_task,
         "enc_reader_task",
-        4096,
+        2048,
         (void*)encoder_queue,
+        configMAX_PRIORITIES - 2,
+        NULL,
+        1
+    );
+    if (ret != pdPASS) {
+        return ESP_FAIL;
+    }
+
+    ret = xTaskCreatePinnedToCore(
+        button_reader_task,
+        "btn_reader_task",
+        2048,
+        NULL,
         configMAX_PRIORITIES - 2,
         NULL,
         1

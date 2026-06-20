@@ -175,35 +175,41 @@ Connect to WiFi SSID `GenArt` (password `genart00`), browse to `http://192.168.4
 
 | Issue | Severity | Notes |
 |-------|----------|-------|
-| Button relies on polling (300ms) | Medium | Misses fast presses; ISR impossible due to crosstalk |
-| Rotation cooldown (500ms) | Low | Prevents false EDIT entry after rotation but limits throughput |
-| ws_task stack 6144 | Low | Adequate for current JSON; increase if new message types added |
-| No client→server WS messages | Low | Only "back" action currently supported |
-| No watchdog timer | Medium | A hung ISR or deadlock hangs the device until power cycle |
-| No OTA updates | Medium | Firmware updates require USB serial reflash |
-| No WiFi manager | Low | Always starts in AP mode; no STA fallback or config portal |
-| No mDNS | Low | Use IP directly: `192.168.4.1` |
-| Captive portal detection varies | Low | Some OS captive portal probes may not be handled |
+| Button relies on polling (10ms task) | Low | Max ~30ms latency; ISR impossible due to CLK/DT crosstalk on SW pin |
+| Rotation cooldown (50ms) | Low | 50ms window after last rotation suppresses button to prevent false EDIT entry |
+| Captive portal detection varies | Low | Catch-all redirect added; some edge-case OS probes may still slip through |
+
+### Intentionally Out of Scope
+
+| Item | Rationale |
+|------|-----------|
+| OTA firmware updates | Requires changing the partition table (TOT, size layout), adding an HTTP upload handler with firmware verification, and a web UI upload button. Would increase attack surface and code complexity significantly. The current USB-serial flash workflow is simple and reliable for a device meant to be built once and flashed rarely. |
+| WiFi manager (AP+STA with config portal) | The device is deliberately **always in AP mode** — no internet required, works anywhere. Adding a STA mode with credential persistence and AP fallback would double the networking code, add a config portal web page, and undermine the "plug and play, works in a desert" ethos. If STA mode is needed for your use case, this is a fork-friendly extension point. |
 
 ---
+
+### Resolved
+
+| Issue | Fix |
+|-------|-----|
+| ws_task stack 4096 | Increased to 6144 — adequate |
+| No client→server WS messages | "back" action implemented via JSON `{"action":"back"}` |
+| No watchdog timer | `esp_task_wdt` added to main task |
+| No mDNS | `genart.local` registered via ESP-IDF mDNS component |
 
 ## Future Improvements
 
 ### Short-term
-- Add watchdog timer (`esp_task_wdt`) for production reliability
 - Batch WS notifications: coalesce rapid param changes (e.g., during rotation) into a single broadcast
 - Add canvas screenshot/download button in web UI
 
 ### Medium-term
 - Parameter presets: save/load named presets from NVS
-- OTA firmware updates via web UI
-- mDNS responder (`esp32-genart.local`) for easy discovery
-- WiFi manager: AP + STA modes, captive portal for first-time setup
 - Web UI improvements: collapsible sections, slider widgets
-
-### Long-term
 - BLE remote control companion app
 - Multiple encoder profiles (swap params per user)
+
+### Long-term
 - Art mode sequencing / autonomous parameter animation
 - Power management: display sleep, deep sleep on idle
 - Production enclosure CAD files + assembly guide
@@ -215,14 +221,14 @@ Connect to WiFi SSID `GenArt` (password `genart00`), browse to `http://192.168.4
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `main/main.c` | 52 | Entry point, init sequence |
+| `main/main.c` | 62 | Entry point, init sequence (mDNS, watchdog) |
 | `main/http_server.c` | 92 | HTTP server, gzip content serving, captive redirects |
 | `main/http_server.h` | 5 | Header |
 | `main/ws_server.c` | 306 | WebSocket server, client tracking, broadcast |
 | `main/ws_server.h` | 27 | Header, notify message types (+ ANIM_CHANGED) |
 | `main/encoder.c` | 121 | Rotary encoder ISR, SW poll |
 | `main/encoder.h` | 24 | Pin defines, event types |
-| `main/ux_task.c` | 377 | UX state machine (3 modes), encoder reader, click debounce |
+| `main/ux_task.c` | 379 | UX state machine (3 modes), encoder reader, button reader (10ms), click debounce |
 | `main/ux_task.h` | 21 | State type, mode enum (ANIM_SELECT/NAVIGATE/EDIT) |
 | `main/param_store.c` | 328 | NVS-backed parameter storage, 5 animation profiles |
 | `main/param_store.h` | 35 | Param struct, profile API, ANIM_MAX_COUNT |

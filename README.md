@@ -1,4 +1,4 @@
-# ESP32 Generative Art Synthesizer — VJ Platform
+# MonoControl: ESP32 Generative Art Synthesizer — VJ Platform
 
 A plug-and-play **VJ (visual jockey) platform** built on an ESP32. Power it via USB, connect any device to its WiFi, and you have a full generative art engine with real-time parameter control — no internet, no setup, no cloud.
 

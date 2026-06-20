@@ -70,6 +70,11 @@ esp_err_t http_server_start(httpd_handle_t *out_handle) {
         "/ncsi.txt",
         "/connecttest.txt",
         "/fwlink",
+        "/success.html",
+        "/success.txt",
+        "/detect.html",
+        "/blank.html",
+        "/captive",
     };
 
     for (size_t i = 0; i < sizeof(captive_uris) / sizeof(captive_uris[0]); i++) {

@@ -15,6 +15,7 @@ idf_component_register(
         esp_netif
         esp_http_server
         esp_timer
+        mdns
         freertos
         driver
         esp_driver_gpio
