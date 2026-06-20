@@ -1,1 +1,6 @@
-build
+build/
+sdkconfig
+screenlog.*
+*.swp
+*.swo
+.DS_Store
