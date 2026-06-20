@@ -17,28 +17,33 @@ UX state machine. Parameters persist across reboots via NVS.
 │   Rotary Encoder     │
 │   CLK=18, DT=19, SW=21
 └──────┬──────────────┘
-       │ ISR → queue
-┌──────▼──────────────┐     ┌──────────────────────┐
-│  encoder_reader_task │────►│  ux_processing_task  │
-│  (Core 1, 50ms)     │     │  (Core 1)            │
-│  SW polling +        │     │  ANIM_SELECT /       │
-│  double-click detect │     │  NAVIGATE / EDIT     │
-└─────────────────────┘     └──────┬───────────────┘
-                                   │ ws_notify_queue
-                                   │
-┌──────────────────────┐    ┌──────▼───────────────┐
-│  HTTP Server          │    │    ws_task           │
-│  port 80, gzip HTML   │    │  (Core 0, 100ms)    │
-│  /  → index.html      │    │  broadcast JSON      │
-│  /ws → WebSocket       │    │  to all clients     │
-└──────────────────────┘    └──────────────────────┘
-        │                              │
-┌───────▼────────┐           ┌─────────▼──────────┐
-│  DNS Server     │           │  Browser (Web)      │
-│  port 53,       │           │  5 generative arts  │
-│  captive portal │           │  Glassmorphic UI    │
-│  all → 192.168.4.1  │           └────────────────────┘
-└────────────────┘
+        │ ISR → queue
+┌──────────────────────┐
+│  encoder_reader_task  │────┐
+│  (Core 1)             │    │
+│  rotation forwarding  │    │   ┌──────────────────────┐
+│  + cooldown cancel    │    ├──►│  ux_processing_task  │
+└──────────────────────┘    │   │  (Core 1)            │
+┌──────────────────────┐    │   │  ANIM_SELECT /       │
+│  button_reader_task   │────┘   │  NAVIGATE / EDIT     │
+│  (Core 1, 10ms)       │        └──────┬───────────────┘
+│  SW debounce +        │               │ ws_notify_queue
+│  click/double-click   │               │
+└──────────────────────┘    ┌───────────▼──────────────┐
+                            │        ws_task           │
+┌──────────────────────┐    │  (Core 0, 100ms)         │
+│  HTTP Server          │    │  broadcast JSON          │
+│  port 80, gzip HTML   │    │  to all clients          │
+│  /  → index.html      │    └─────────────────────────┘
+│  /ws → WebSocket       │              │
+└──────────┬───────────┘    ┌───────────▼──────────────┐
+           │                │     Browser (Web)         │
+┌──────────▼───────────┐    │  5 generative arts       │
+│  DNS Server           │    │  Glassmorphic UI         │
+│  port 53,             │    └─────────────────────────┘
+│  captive portal       │
+│  all → 192.168.4.1    │
+└───────────────────────┘
 ```
 
 ## Components
@@ -54,16 +59,18 @@ UX state machine. Parameters persist across reboots via NVS.
 - `encoder_read_sw()` — direct GPIO read, non-blocking
 
 ### `ux_task.c`
-- `encoder_reader_task` (50ms poll, Core 1):
+- `encoder_reader_task` (Core 1):
   - Reads rotation events from ISR queue → forwards to UX queue
-  - Polls SW pin with 6-sample debounce (300ms)
-  - 500ms rotation cooldown — cancels any pending click timer (prevents false EDIT entry after rotation)
-  - Click timer: 300ms window → single-click if timer expires, double-click if another press arrives
+  - If a click timer is running, cancels it on rotation (prevents false EDIT entry after rotation-cooldown)
+- `button_reader_task` (10ms poll, Core 1):
+  - Polls SW pin via `encoder_read_sw()`, 2-sample debounce (~20ms)
+  - 50ms rotation cooldown after last rotation suppresses button events
+  - Click timer: 250ms window — first press starts timer, second press before expiry = double-click, timer expiry = single-click
   - `button_pressed_flag` ensures one event per press-release cycle
 - `ux_processing_task` (Core 1):
-  - **ANIM_SELECT**: rotate → cycle animations, click → load selected animation → enter NAVIGATE
-  - **NAVIGATE**: rotate → change `preselected` param, click → enter EDIT, click "← Back" → return to ANIM_SELECT, double-click → return to ANIM_SELECT
-  - **EDIT**: rotate → adjust param value (clamped to min/max/step), click → return to NAVIGATE
+  - **ANIM_SELECT**: rotate → cycle animations, single-click → load selected animation → enter NAVIGATE, double-click → no-op
+  - **NAVIGATE**: rotate → change `preselected` param, single-click on param 0 ("← Back") → ANIM_SELECT, single-click on other param → enter EDIT, double-click → ANIM_SELECT
+  - **EDIT**: rotate → adjust param value (clamped to min/max/step), single-click or double-click → return to NAVIGATE
   - Posts state/param/anim changes to `ws_notify_queue`
 - Supports `ux_task_post_back()` — triggered via WebSocket "back" action from the browser's swipe-down gesture
 
