@@ -8,7 +8,7 @@ A plug-and-play **VJ (visual jockey) platform** built on an ESP32. Power it via 
 
 ## Why This Exists
 
-This project demonstrates how a $5 ESP32 microcontroller can:
+This project demonstrates how a €9 ESP32 microcontroller can:
 
 - **Serve as a standalone web server** that beams its own WiFi
 - **Run real-time generative art** (Canvas 2D) streamed to any browser
